@@ -1,0 +1,33 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.pytest_cache/
+.hypothesis/
+.dmypy.json
+dmypy.json
+*.prof
+.env
+.env.local
+.env.*.local
+*.env
+.DS_Store
+data/*.txt  # Scraped data, regenerate
+banks_data.py  # Generated, commit initial clean version
+

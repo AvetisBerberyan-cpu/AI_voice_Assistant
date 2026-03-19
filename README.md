@@ -70,9 +70,3 @@ Guard: Reject if not credits/deposits/branches
    - Connect via LiveKit web/app (e.g., https://github.com/livekit/agents).
    - Speak ARM: "Որքա՞ն է մանրահաշիվների տոկոսադրույքը Mellat բանկում?" → Answers from data.
    - Off-topic: "Եղանակը?" → Refuses.
-
-**Scalability**: Add banks to `BANKS` dict, rerun scraper.
-
-**GitHub**: Push to your repo, invite HaykTarkhanyan. Local demo ready.
-
-**Costs**: ~$0.15/hour voice (STT+LLM+TTS).

@@ -121,23 +121,20 @@ python agent.py dev
 python agent.py console
 ```
 
+## Usage (Console Mode)
+Run the agent locally and talk via the built‑in console:
+```bash
+python agent.py console
+```
+Speak your question in Armenian. Example prompts:
+1. «Մելաթ բանկում ի՞նչ վարկեր կան»
+2. «ACBA-ում ավանդների պայմանները ի՞նչ են»
+3. «Ինեկոբանկի մասնաճյուղերի հասցեները»
+
 ## Notes on Evaluation
 
 - The agent answers **only** from the scraped corpus. If a bank changes its website, re-run the scraper.
 - To scale to more banks, add URLs in `banks.yaml` and re-run `scripts/scrape_banks.py`.
-
-  ```
-  python run_scraper.py
-  ```
-
-6. **Run Agent**:
-
-   ```
-   livekit-server --version  # Ensure server running
-   python agent.py
-   ```
-
-   - Joins LiveKit rooms, handles voice.
 
 7. **Test**:
    - Connect via LiveKit web/app (e.g., https://github.com/livekit/agents).

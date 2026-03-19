@@ -29,5 +29,5 @@ dmypy.json
 *.env
 .DS_Store
 data/*.txt  # Scraped data, regenerate
+data/*.json  # Scraped data, regenerate
 banks_data.py  # Generated, commit initial clean version
-

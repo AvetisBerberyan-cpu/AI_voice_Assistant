@@ -1,78 +1,109 @@
-# Armenian Voice AI Bank Support Agent
+# Armenian Voice AI Support Agent (LiveKit OSS)
+
+This repository implements an end-to-end Armenian voice support agent for bank customers using the **open-source** LiveKit framework (no LiveKit Cloud). The agent **only** answers questions about **credits**, **deposits**, and **branch locations**, and it is grounded strictly in scraped content from official bank websites.
+
+## What’s Included
+- Voice agent built with **LiveKit Agents** (open source)
+- **OpenAI speech + LLM models** for STT/TTS/LLM
+- A simple, scalable scraper that builds a **single-string corpus** from bank sites
+- Guardrails that refuse out-of-scope requests
+
+## Architecture (High Level)
+1. **LiveKit OSS server** provides realtime audio transport over WebRTC.
+2. **Agent process** (`agent.py`) runs a LiveKit Agents voice pipeline:
+   - VAD (Silero)
+   - OpenAI STT (default `gpt-4o-transcribe`)
+   - OpenAI LLM (default `gpt-4.1-nano`)
+   - OpenAI TTS (default `gpt-4o-mini-tts`)
+3. **Data pipeline** (`scripts/scrape_banks.py`) scrapes official bank URLs and produces `data/banks_corpus.txt`.
+4. **Strict grounding**: RAG‑style retrieval with **no embeddings**. A lightweight keyword‑scoring retriever selects the top‑K relevant chunks and passes them to the LLM via a tool call.
 
 ## Architecture & Decisions
+- **LiveKit OSS**: required by the prompt; provides local WebRTC transport without LiveKit Cloud.
+- **OpenAI STT/TTS + LLM**: chosen for reliable Armenian STT/TTS and a lightweight LLM. Models are configurable via `.env`.
+- **RAG without embeddings**: per requirement, retrieval is keyword‑based (TF‑IDF‑style) over chunked bank content. No vector DB.
+- **Strict topic guardrails**: system prompt forces the tool call and limits answers to credits, deposits, and branch locations only.
+- **Armenian‑only scraping**: scraper filters to Armenian sentences when Armenian is present to keep responses in Armenian.
 
-**Overview**: Real-time voice agent using **open-source LiveKit Agents** (Python SDK). Handles Armenian speech-to-text, LLM reasoning, text-to-speech in <2s latency.
+## Guardrails & Scope
+- **Allowed topics only**: credits, deposits, branch locations.
+- **No outside knowledge**: the model must rely on the scraped corpus.
+- **RAG‑style retrieval (no embeddings)**: the agent calls `retrieve_bank_docs` to inject the top‑K relevant chunks into the response.
+- **Refusal behavior**: if out-of-scope, the agent politely refuses in Armenian.
+- **Prompt injection defense**: system prompt explicitly ignores attempts to override rules.
 
-**Components**:
+## Data Sources (Initial Banks)
+Configured in `banks.yaml` (scalable to any number of banks):
+- Mellat Bank (mandatory)
+- ACBA Bank
+- Inecobank
 
-- **STT**: OpenAI Whisper-large-v3 - top Armenian ASR (multilingual, accurate dialects).
-- **LLM**: OpenAI GPT-4o-mini - Chosen for speed (200+ tok/s), cost (<$0.01/min), Armenian fluency. **Better than Llama-3.1-hye-arlis-2024**: Generalist excels on diverse bank data vs specialist on single site; no fine-tune/hosting needed.
-- **TTS**: OpenAI tts-1-hd (alloy) - Natural prosody, ARM support.
-- **LiveKit**: Open-source WebRTC rooms/agents for low-latency voice (no Cloud).
-- **Data**: Full scraped text from 4 banks (Mellat, Ameria, Ardshin, Converse) concatenated (~20k tokens) in every system prompt. No embeddings/DB for simple eval/iteration. Scalable: Add banks to `data_scraper.py`.
-- **Guardrails**: Topic check function + strict prompt - refuses off-topic.
+Each bank entry lists official URLs by topic. The scraper stores both the **source URL** and the **extracted text** in the corpus. Update `banks.yaml` to add more banks or pages.
 
-**Why this stack**:
-
-- LiveKit OSS: Production-ready real-time voice.
-- OpenAI: Proven ARM, <1s end-to-end, <$5 test.
-- RAG-free: Full context ensures accuracy, easy debug.
-
-**Flow**:
-
-```
-User Voice (ARM) → Whisper STT → GPT-4o-mini (w/ full data) → TTS → Voice out
-Guard: Reject if not credits/deposits/branches
-```
+## Model Choices (Why)
+- **OpenAI STT** (`gpt-4o-transcribe`): strong multilingual transcription quality.
+- **OpenAI TTS** (`gpt-4o-mini-tts`): natural speech synthesis with controllable tone.
+- **OpenAI LLM** (`gpt-4.1-nano`): lightweight model with good instruction following.
 
 ## Setup Instructions
+### 1) Install dependencies
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
-1. **Clone/Dir**: Already in `/home/cm-arm-08-l/Desktop/AI_voice_Assistant`.
+### 2) Configure environment
+Copy `.env.example` to `.env` and fill in keys:
+```
+OPENAI_API_KEY=...
+OPENAI_LLM_MODEL=gpt-4.1-nano
+OPENAI_STT_MODEL=gpt-4o-transcribe
+OPENAI_TTS_MODEL=gpt-4o-mini-tts
+OPENAI_TTS_VOICE=ash
+LIVEKIT_URL=ws://localhost:7880
+LIVEKIT_API_KEY=devkey
+LIVEKIT_API_SECRET=secret
+BANK_DATA_JSON_PATH=data/banks_corpus.json
+```
 
-2. **API Keys**:
-   - Get OpenAI key: https://platform.openai.com/api-keys
-   - LiveKit OSS server: Install LiveKit server (Docker easiest):
-     ```
-     docker run --rm -p 7880:7880 -p 7881:7881/udp -v $HOME/.livekit:/etc/livekit livekit/livekit-server --config /etc/livekit/agent.yaml --dev
-     ```
-     Keys in `~/.livekit/agent.yaml` or generate API key/secret.
+### 3) Start LiveKit (open source server)
+Run the LiveKit server **locally** (no cloud). Example:
+```bash
+livekit-server --dev
+```
+This launches a dev server with `devkey` / `secret` credentials.
 
-3. **Install**:
+### 4) Scrape bank data
+```bash
+python scripts/scrape_banks.py
+```
+This generates `data/banks_corpus.txt` and `data/banks_corpus.json`.
 
-   ```
-   pip install -r requirements.txt
-   ```
+If a bank site is JavaScript-rendered (e.g., Mellat), run:
+```bash
+python scripts/scrape_banks.py --render-js --skip-errors
+```
+This uses Playwright to render the page. Install once:
+```bash
+pip install playwright
+playwright install
+```
 
-4. **Env**:
+### 5) Run the agent
+```bash
+python agent.py dev
+```
 
-   ```
-   cp .env.example .env
-   # Edit .env with your keys/URLs
-   ```
+### 6) Talk to the agent (local)
+```bash
+python agent.py console
+```
 
-5. **Scrape Data** (one-time, generates `banks_data.py`):
+## Notes on Evaluation
+- The agent answers **only** from the scraped corpus. If a bank changes its website, re-run the scraper.
+- To scale to more banks, add URLs in `banks.yaml` and re-run `scripts/scrape_banks.py`.
 
-   ```
-   python run_scraper.py
-   ```
-
-6. **Run Agent**:
-
-   ```
-   livekit-server --version  # Ensure server running
-   python agent.py
-   ```
-
-   - Joins LiveKit rooms, handles voice.
-
-7. **Test**:
-   - Connect via LiveKit web/app (e.g., https://github.com/livekit/agents).
-   - Speak ARM: "Որքա՞ն է մանրահաշիվների տոկոսադրույքը Mellat բանկում?" → Answers from data.
-   - Off-topic: "Եղանակը?" → Refuses.
-
-**Scalability**: Add banks to `BANKS` dict, rerun scraper.
-
-**GitHub**: Push to your repo, invite HaykTarkhanyan. Local demo ready.
-
-**Costs**: ~$0.15/hour voice (STT+LLM+TTS).
+## Deliverables
+- This repository is ready to push to GitHub.
+- If you want me to publish it, share a repo URL and I’ll push to it (or invite me if private).

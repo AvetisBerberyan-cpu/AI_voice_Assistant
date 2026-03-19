@@ -1,7 +1,6 @@
-livekit-agents[openai]
-python-dotenv
-requests
-beautifulsoup4
-lxml
-# asyncio stdlib
-# Latest versions resolve deps (livekit-agents 1.0+ needs openai>=1.68)
+livekit-agents[openai,silero]~=1.4
+python-dotenv~=1.0
+requests~=2.32
+beautifulsoup4~=4.12
+pypdf~=5.1
+pyyaml~=6.0

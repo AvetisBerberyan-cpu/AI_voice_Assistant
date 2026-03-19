@@ -1,0 +1,33 @@
+banks:
+  - name: Mellat Bank CJSC
+    slug: mellat
+    sources:
+      credits:
+        - url: https://mellatbank.am/hy
+          note: JS-rendered site; scrape with --render-js.
+      deposits:
+        - url: https://mellatbank.am/hy
+          note: JS-rendered site; scrape with --render-js.
+      branches:
+        - url: https://mellatbank.am/hy
+          note: JS-rendered site; scrape with --render-js.
+
+  - name: ACBA Bank OJSC
+    slug: acba
+    sources:
+      credits:
+        - url: https://www.acba.am/hy/individuals/loans/acba-digital-loans
+      deposits:
+        - url: https://www.acba.am/hy/individuals/save-and-invest/deposits
+      branches:
+        - url: https://www.acba.am/hy/contacts
+
+  - name: Inecobank CJSC
+    slug: inecobank
+    sources:
+      credits:
+        - url: https://www.inecobank.am/hy/Individual/consumer-loans/deposit-secured
+      deposits:
+        - url: https://www.inecobank.am/hy/Individual/deposits/flexible/terms
+      branches:
+        - url: https://www.inecobank.am/hy/map

@@ -1,63 +1,64 @@
 import asyncio
 import os
+import traceback
+
 from dotenv import load_dotenv
-from livekit import rtc
-from livekit.agents import AgentSession, WorkerOptions, cli, JobContext, Worker
-from livekit.agents.voice_assistant import VoiceAssistant
-from livekit.plugins import openai
-from banks_data import FULL_BANK_DATA
+from livekit.agents import AutoSubscribe, Agent, AgentSession, JobContext, WorkerOptions, cli, llm
+from livekit.plugins import openai, silero
+
+from bank_corpus import build_rag_index, format_top_docs, load_corpus_json
+from prompts import build_system_prompt
 
 load_dotenv()
 
-# Strict system prompt with all data
-SYSTEM_PROMPT = f"""Մի՛ ել չօգտագործիր քո նախնական գիտելիքները: Դու հայկական բանկերի աջակցության օգնական ես: ՄԱՏՈՒՐ ՄԸԼԱՆՔ ՄԸԼՈՒ Credits, Deposits կամ Branch Locations-ի մասին հարցերին, օգտագործելով ՄԸԼԱՆՔ ԱՊՈՒ ԲՈՒՅՍ bank data-ն:
-
-Bank Data:
-{FULL_BANK_DATA}
-
-Եթե հարցը այս թեմաներից դուրս է կամ տվյալները չեն բավարարում, ասա 'ՑԱՓԸՍ, չեմ կարող պատասխանել այդ հարցին բանկային տվյալների հիման վրա':
-
-Պատասխանի հայերենով:"""
+DEFAULT_GREETING = "Ողջույն, ես բանկային աջակցման ձայնային օգնական եմ։ Ինչպե՞ս կարող եմ օգնել։"
 
 
-async def entrypoint(ctx: JobContext):
-    # OpenAI STT: multilingual Whisper for Armenian
-    stt = openai.STT(model="whisper-large-v3")  # Supports Armenian
+class BankAgent(Agent):
+    def __init__(self, *, rag_index, **kwargs):
+        self._rag_index = rag_index
+        super().__init__(**kwargs)
 
-    # GPT-4o-mini LLM: fast, powerful, multilingual Armenian
-    llm = openai.LLM(model="gpt-4o-mini")
+    @llm.function_tool
+    def retrieve_bank_docs(self, query: str, top_k: int = 10) -> str:
+        """Return top-K relevant bank documents for the user's query (no embeddings)."""
+        try:
+            return format_top_docs(self._rag_index, query, top_k=top_k, max_chars=6000)
+        except Exception:
+            traceback.print_exc()
+            return ""
 
-    # OpenAI TTS: natural Armenian speech
-    tts = openai.TTS(model="tts-1-hd", voice="alloy")  # Clear multilingual voice
 
-    assistant = VoiceAssistant(
-        vad={},
-        stt=stt,
-        llm=llm,
-        tts=tts,
-        chat_ctx=openai.ChatContext().append(role="system", text=SYSTEM_PROMPT),
+async def entrypoint(ctx: JobContext) -> None:
+    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+
+    corpus_json_path = os.getenv("BANK_DATA_JSON_PATH", "data/banks_corpus.json")
+    llm_model = os.getenv("OPENAI_LLM_MODEL", "gpt-4.1-nano")
+    stt_model = os.getenv("OPENAI_STT_MODEL", "gpt-4o-transcribe")
+    tts_model = os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
+    tts_voice = os.getenv("OPENAI_TTS_VOICE", "ash").strip()
+    corpus_json = load_corpus_json(corpus_json_path)
+    rag_index = build_rag_index(corpus_json)
+    system_prompt = build_system_prompt()
+
+    agent = BankAgent(
+        rag_index=rag_index,
+        instructions=system_prompt,
+        vad=silero.VAD.load(),
+        stt=openai.STT(model=stt_model, language="hy"),
+        llm=openai.LLM(model=llm_model),
+        tts=openai.TTS(
+            model=tts_model,
+            voice=tts_voice,
+            instructions="Խոսի՛ր բնական, բարեհամբույր և պրոֆեսիոնալ հայկականով։",
+        ),
     )
 
-    # Reject non-topic via fnc (guardrail)
-    @assistant.function()
-    async def is_valid_topic(session: AgentSession, topic: str):
-        valid_topics = [
-            "credits",
-            "deposits",
-            "branches",
-            "լոն",
-            "գումար",
-            "մասնաճյուղ",
-        ]
-        return any(t in topic.lower() for t in valid_topics)
-
-    await ctx.connect_assistant(assistant)
+    session = AgentSession()
+    await session.start(agent, room=ctx.room)
+    await asyncio.sleep(0.5)
+    session.say(DEFAULT_GREETING, allow_interruptions=True)
 
 
 if __name__ == "__main__":
-    cli.run_app(
-        WorkerOptions(
-            entrypoint_fnc=entrypoint,
-            redis_url=None,  # Local
-        )
-    )
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
